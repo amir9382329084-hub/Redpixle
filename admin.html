@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="robots" content="noindex,nofollow">
+  <title>مدیریت REDPIXEL</title>
+  <link rel="stylesheet" href="admin.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+</head>
+<body>
+  <main class="shell">
+    <section id="login-view" class="login-card">
+      <div class="brand"><span class="brand-mark">R</span><span>RED<span>PIXEL</span></span></div>
+      <p class="eyebrow">PRIVATE ADMIN AREA</p>
+      <h1>ورود به پنل مدیریت</h1>
+      <p class="muted">این بخش فقط برای مدیر اصلی سایت است.</p>
+      <form id="login-form">
+        <label for="login-email">ایمیل مدیر</label>
+        <input id="login-email" type="email" autocomplete="username" required>
+        <label for="login-password">رمز عبور</label>
+        <input id="login-password" type="password" autocomplete="current-password" required>
+        <button class="primary" type="submit">ورود امن <i class="fa-solid fa-arrow-left"></i></button>
+        <p id="login-status" class="status" role="status"></p>
+      </form>
+      <a class="back-link" href="index.html">بازگشت به سایت</a>
+    </section>
+
+    <section id="dashboard-view" class="dashboard hidden">
+      <header class="topbar">
+        <div class="brand"><span class="brand-mark">R</span><span>RED<span>PIXEL</span></span><small>ADMIN</small></div>
+        <div class="top-actions"><span id="admin-email" class="muted"></span><button id="logout-btn" class="ghost">خروج <i class="fa-solid fa-right-from-bracket"></i></button></div>
+      </header>
+      <div class="layout">
+        <aside class="sidebar">
+          <button class="tab active" data-tab="overview"><i class="fa-solid fa-chart-pie"></i> نمای کلی</button>
+          <button class="tab" data-tab="projects"><i class="fa-solid fa-images"></i> نمونه‌کارها</button>
+          <button class="tab" data-tab="messages"><i class="fa-solid fa-envelope"></i> پیام‌ها</button>
+          <a class="tab site-link" href="index.html"><i class="fa-solid fa-arrow-up-right-from-square"></i> مشاهده سایت</a>
+        </aside>
+        <div class="content">
+          <section id="tab-overview" class="panel-section">
+            <div class="heading"><div><p class="eyebrow">DASHBOARD</p><h1>خوش آمدی مدیر</h1><p class="muted">وضعیت کلی وب‌سایت REDPIXEL</p></div></div>
+            <div class="stats">
+              <article class="stat"><span>کل نمونه‌کارها</span><strong id="stat-projects">—</strong><i class="fa-solid fa-images"></i></article>
+              <article class="stat"><span>پیام‌های دریافتی</span><strong id="stat-messages">—</strong><i class="fa-solid fa-envelope"></i></article>
+              <article class="stat"><span>پیام‌های خوانده‌نشده</span><strong id="stat-unread">—</strong><i class="fa-solid fa-bell"></i></article>
+            </div>
+            <div class="welcome-box"><h2>پنل اختصاصی تو آماده مدیریت است.</h2><p>از منوی کناری می‌توانی نمونه‌کارها را منتشر کنی و پیام‌های فرم تماس و سفارش را بخوانی.</p></div>
+          </section>
+
+          <section id="tab-projects" class="panel-section hidden">
+            <div class="heading"><div><p class="eyebrow">PORTFOLIO</p><h1>مدیریت نمونه‌کارها</h1><p class="muted">پروژه جدید اضافه کن یا نمونه‌کارهای قبلی را ویرایش کن.</p></div></div>
+            <form id="project-form" class="editor">
+              <input type="hidden" id="project-id">
+              <h2 id="project-form-title">افزودن نمونه‌کار جدید</h2>
+              <div class="form-grid">
+                <div><label for="project-title">عنوان پروژه</label><input id="project-title" maxlength="120" required></div>
+                <div><label for="project-category">دسته‌بندی</label><input id="project-category" maxlength="80" placeholder="مثلاً طراحی پوستر"></div>
+                <div class="wide"><label for="project-description">توضیحات</label><textarea id="project-description" maxlength="1000" rows="3"></textarea></div>
+                <div><label for="project-url">لینک پروژه (اختیاری)</label><input id="project-url" type="url" placeholder="https://..."></div>
+                <div><label for="project-image">تصویر نمونه‌کار</label><input id="project-image" type="file" accept="image/png,image/jpeg,image/webp"></div>
+              </div>
+              <label class="check"><input id="project-published" type="checkbox" checked> انتشار در سایت</label>
+              <div class="form-actions"><button class="primary" type="submit">ذخیره نمونه‌کار</button><button class="ghost" id="cancel-edit" type="button">پاک‌کردن فرم</button></div>
+              <p id="project-status" class="status" role="status"></p>
+            </form>
+            <div id="projects-list" class="item-list"></div>
+          </section>
+
+          <section id="tab-messages" class="panel-section hidden">
+            <div class="heading"><div><p class="eyebrow">INBOX</p><h1>پیام‌های دریافتی</h1><p class="muted">پیام‌های فرم تماس و ثبت سفارش در این بخش نمایش داده می‌شوند.</p></div><button id="refresh-messages" class="ghost">به‌روزرسانی <i class="fa-solid fa-rotate"></i></button></div>
+            <div id="messages-list" class="message-list"></div>
+          </section>
+        </div>
+      </div>
+    </section>
+  </main>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="supabase-config.js"></script>
+  <script src="admin.js" defer></script>
+</body>
+</html>
