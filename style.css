@@ -1,96 +1,137 @@
-/* ===== متغیرها ===== */
-:root {
-  --bg-primary: #0a0a0a;
-  --bg-secondary: #121212;
-  --bg-card: #1a1a1a;
-  --text-primary: #f0f0f0;
-  --text-secondary: #b0b0b0;
-  --accent: #ff1a1a;
-  --accent-glow: rgba(255, 26, 26, 0.45);
-  --border-color: #2a2a2a;
-  --input-bg: #151515;
-  --shadow: 0 0 25px rgba(255, 26, 26, 0.15);
-  --transition: all 0.3s ease;
-}
+(() => {
+  const cfg = window.REDPIXEL_SUPABASE;
+  if (!cfg || !window.supabase) {
+    document.getElementById('login-status').textContent = 'تنظیمات اتصال سوپابیس بارگذاری نشد.';
+    return;
+  }
+  const db = window.supabase.createClient(cfg.url, cfg.publishableKey);
+  const $ = id => document.getElementById(id);
+  const loginView = $('login-view'), dashboardView = $('dashboard-view');
+  const status = (id, msg, ok=false) => { const el=$(id); if(el){el.textContent=msg;el.style.color=ok?'#45d39b':'#ff858b';} };
+  const esc = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  const fmtDate = value => value ? new Date(value).toLocaleString('fa-IR') : '';
 
-body.light-theme {
-  --bg-primary: #f4f4f4;
-  --bg-secondary: #ffffff;
-  --bg-card: #ffffff;
-  --text-primary: #141414;
-  --text-secondary: #555;
-  --accent: #d40000;
-  --accent-glow: rgba(212, 0, 0, 0.25);
-  --border-color: #e2e2e2;
-  --input-bg: #f0f0f0;
-  --shadow: 0 0 20px rgba(212, 0, 0, 0.12);
-}
+  async function verifyAndShow(user) {
+    if (!user || user.id !== cfg.adminUid) {
+      await db.auth.signOut();
+      loginView.classList.remove('hidden'); dashboardView.classList.add('hidden');
+      status('login-status','این حساب اجازه ورود به پنل REDPIXEL را ندارد.');
+      return;
+    }
+    loginView.classList.add('hidden'); dashboardView.classList.remove('hidden');
+    $('admin-email').textContent = user.email || '';
+    await refreshAll();
+  }
 
-/* ===== پایه ===== */
-* { margin: 0; padding: 0; box-sizing: border-box; }
+  $('login-form').addEventListener('submit', async e => {
+    e.preventDefault();
+    status('login-status','در حال بررسی اطلاعات...',true);
+    const {data,error} = await db.auth.signInWithPassword({
+      email:$('login-email').value.trim(),
+      password:$('login-password').value
+    });
+    if(error){status('login-status','ورود انجام نشد؛ ایمیل و رمز عبور را بررسی کن.');return;}
+    await verifyAndShow(data.user);
+  });
+  $('logout-btn').addEventListener('click', async () => { await db.auth.signOut(); dashboardView.classList.add('hidden');loginView.classList.remove('hidden');$('login-password').value=''; });
+  db.auth.getSession().then(({data}) => { if(data.session) verifyAndShow(data.session.user); });
 
-body {
-  font-family: 'Segoe UI', Tahoma, sans-serif;
-  background: var(--bg-primary);
-  color: var(--text-primary);
-  transition: var(--transition);
-  line-height: 1.7;
-  overflow-x: hidden;
-}
+  document.querySelectorAll('.tab[data-tab]').forEach(btn => btn.addEventListener('click', () => {
+    document.querySelectorAll('.tab[data-tab]').forEach(x=>x.classList.toggle('active',x===btn));
+    document.querySelectorAll('.panel-section').forEach(x=>x.classList.add('hidden'));
+    $('tab-'+btn.dataset.tab).classList.remove('hidden');
+    if(btn.dataset.tab==='projects') loadProjects();
+    if(btn.dataset.tab==='messages') loadMessages();
+  }));
 
-a { text-decoration: none; color: inherit; }
-img { max-width: 100%; display: block; }
+  async function refreshAll(){
+    const [p,m,u] = await Promise.all([
+      db.from('projects').select('id',{count:'exact',head:true}),
+      db.from('messages').select('id',{count:'exact',head:true}),
+      db.from('messages').select('id',{count:'exact',head:true}).eq('is_read',false)
+    ]);
+    $('stat-projects').textContent = p.count ?? '—';
+    $('stat-messages').textContent = m.count ?? '—';
+    $('stat-unread').textContent = u.count ?? '—';
+  }
 
-.container { width: 90%; max-width: 1200px; margin: 0 auto; }
-.accent { color: var(--accent); text-shadow: 0 0 12px var(--accent-glow); }
+  function clearProjectForm(){
+    $('project-form').reset(); $('project-id').value=''; $('project-published').checked=true;
+    $('project-form-title').textContent='افزودن نمونه‌کار جدید'; status('project-status','',true);
+  }
+  $('cancel-edit').addEventListener('click',clearProjectForm);
 
-/* ===== هدر ===== */
-.header {
-  background: var(--bg-secondary);
-  border-bottom: 1px solid var(--border-color);
-  position: sticky; top: 0; z-index: 1000;
-  transition: var(--transition);
-}
-.nav-container {
-  display: flex; justify-content: space-between; align-items: center;
-  padding: 1rem 0;
-}
-.logo {
-  display: flex; align-items: center; gap: 0.7rem;
-  font-size: 1.4rem; font-weight: 800; letter-spacing: 1px;
-}
+  $('project-form').addEventListener('submit', async e => {
+    e.preventDefault(); status('project-status','در حال ذخیره...',true);
+    const id=$('project-id').value;
+    const payload={
+      title:$('project-title').value.trim(),
+      category:$('project-category').value.trim() || null,
+      description:$('project-description').value.trim() || null,
+      project_url:$('project-url').value.trim() || null,
+      is_published:$('project-published').checked
+    };
+    const file=$('project-image').files[0];
+    if(file){
+      if(!['image/jpeg','image/png','image/webp'].includes(file.type) || file.size>5*1024*1024){
+        status('project-status','فقط تصویر JPG، PNG یا WEBP تا حجم ۵ مگابایت مجاز است.');return;
+      }
+      const ext=file.name.split('.').pop().toLowerCase();
+      const path=`${crypto.randomUUID()}.${ext}`;
+      const {error:upErr}=await db.storage.from('portfolio').upload(path,file,{contentType:file.type,upsert:false});
+      if(upErr){status('project-status','آپلود تصویر انجام نشد. تنظیمات Storage را بررسی کن.');return;}
+      payload.image_url=db.storage.from('portfolio').getPublicUrl(path).data.publicUrl;
+    }
+    let result;
+    if(id) result=await db.from('projects').update(payload).eq('id',id);
+    else result=await db.from('projects').insert(payload);
+    if(result.error){status('project-status','ذخیره انجام نشد. دسترسی دیتابیس را بررسی کن.');return;}
+    status('project-status','نمونه‌کار با موفقیت ذخیره شد.',true);
+    clearProjectForm(); await loadProjects(); await refreshAll();
+  });
 
-/* آیکون لوگوی RedPixel */
-.logo-icon {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 38px;
-  height: 38px;
-  background: var(--accent);
-  color: #fff;
-  font-weight: 900;
-  font-size: 1.3rem;
-  border-radius: 8px;
-  box-shadow: 0 0 15px var(--accent-glow);
-  font-family: 'Arial Black', Arial, sans-serif;
-  transition: var(--transition);
-}
-.logo:hover .logo-icon {
-  box-shadow: 0 0 25px var(--accent-glow);
-  transform: rotate(-5deg);
-}
+  async function loadProjects(){
+    const box=$('projects-list'); box.innerHTML='<div class="empty">در حال دریافت نمونه‌کارها...</div>';
+    const {data,error}=await db.from('projects').select('*').order('created_at',{ascending:false});
+    if(error){box.innerHTML='<div class="empty">دریافت نمونه‌کارها ناموفق بود.</div>';return;}
+    if(!data.length){box.innerHTML='<div class="empty">هنوز نمونه‌کاری ثبت نشده است.</div>';return;}
+    box.innerHTML=data.map(p=>`<article class="item">
+      <img src="${esc(p.image_url || 'https://picsum.photos/200/140')}" alt="">
+      <div class="item-main"><h3>${esc(p.title)}</h3><p>${esc(p.category||'بدون دسته‌بندی')} · ${p.is_published?'منتشرشده':'پیش‌نویس'}</p></div>
+      <div class="item-actions"><button class="small-btn" data-edit="${p.id}">ویرایش</button><button class="small-btn danger" data-delete="${p.id}">حذف</button></div>
+    </article>`).join('');
+    box.querySelectorAll('[data-edit]').forEach(btn=>btn.addEventListener('click',()=>editProject(data.find(p=>String(p.id)===btn.dataset.edit))));
+    box.querySelectorAll('[data-delete]').forEach(btn=>btn.addEventListener('click',()=>deleteProject(btn.dataset.delete)));
+  }
+  function editProject(p){
+    if(!p)return;
+    $('project-id').value=p.id; $('project-title').value=p.title||'';
+    $('project-category').value=p.category||''; $('project-description').value=p.description||'';
+    $('project-url').value=p.project_url||''; $('project-published').checked=!!p.is_published;
+    $('project-form-title').textContent='ویرایش نمونه‌کار';
+    status('project-status','برای جایگزینی تصویر، فایل جدید انتخاب کن؛ در غیر این صورت تصویر فعلی حفظ می‌شود.',true);
+    $('project-form').scrollIntoView({behavior:'smooth',block:'start'});
+  }
+  async function deleteProject(id){
+    if(!confirm('این نمونه‌کار حذف شود؟'))return;
+    const {error}=await db.from('projects').delete().eq('id',id);
+    if(error){alert('حذف انجام نشد.');return;}
+    await loadProjects();await refreshAll();
+  }
 
-.nav { display: flex; align-items: center; gap: 1.6rem; }
-.nav a { font-weight: 500; font-size: 0.95rem; position: relative; transition: var(--transition); }
-.nav a:hover { color: var(--accent); }
-.nav a::after {
-  content: ''; position: absolute; bottom: -6px; right: 0;
-  width: 0; height: 2px; background: var(--accent);
-  transition: var(--transition);
-}
-.nav a:hover::after { width: 100%; }
-
-.theme-toggle {
-  background: transparent; border: 1.5px solid var(--accent);
-  color: var(--accent); width: 38px; height: 38px; border-radius: 50%;
+  async function loadMessages(){
+    const box=$('messages-list');box.innerHTML='<div class="empty">در حال دریافت پیام‌ها...</div>';
+    const {data,error}=await db.from('messages').select('*').order('created_at',{ascending:false});
+    if(error){box.innerHTML='<div class="empty">دریافت پیام‌ها ناموفق بود.</div>';return;}
+    if(!data.length){box.innerHTML='<div class="empty">هنوز پیامی دریافت نشده است.</div>';return;}
+    box.innerHTML=data.map(m=>`<article class="message ${m.is_read?'':'unread'}">
+      <div class="message-head"><h3>${esc(m.name)} · ${esc(m.subject||'بدون موضوع')}</h3><span class="muted">${m.is_read?'خوانده‌شده':'خوانده‌نشده'}</span></div>
+      <div class="message-meta">${esc(m.email||'بدون ایمیل')} · ${esc(fmtDate(m.created_at))}</div>
+      <div class="message-body">${esc(m.message)}</div>
+      <div class="message-actions">${m.is_read?'':`<button class="small-btn" data-read="${m.id}">علامت‌گذاری به‌عنوان خوانده‌شده</button>`}<button class="small-btn danger" data-remove="${m.id}">حذف پیام</button></div>
+    </article>`).join('');
+    box.querySelectorAll('[data-read]').forEach(btn=>btn.addEventListener('click',async()=>{await db.from('messages').update({is_read:true}).eq('id',btn.dataset.read);await loadMessages();await refreshAll();}));
+    box.querySelectorAll('[data-remove]').forEach(btn=>btn.addEventListener('click',async()=>{if(!confirm('این پیام حذف شود؟'))return;const {error}=await db.from('messages').delete().eq('id',btn.dataset.remove);if(error){alert('حذف پیام ناموفق بود.');return;}await loadMessages();await refreshAll();}));
+  }
+  $('refresh-messages').addEventListener('click',loadMessages);
+})();
